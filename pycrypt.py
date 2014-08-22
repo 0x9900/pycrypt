@@ -1,10 +1,10 @@
 #!/usr/bin/env python2.7
 #
-# Author: Fred Cirera <github-fred@hidzz.com>
+# Author: Fred C. <github-fred@hidzz.com>
 # Module: pycrypt.py
 #
 """
-pycrypt:
+pycrypt: Encrypt and decript your files.
 
 """
 
@@ -127,13 +127,7 @@ def main():
     if not os.path.exists(args.source_file):
       raise IOError('Source file: "{}" not found.'.format(args.source_file))
 
-    if os.path.isdir(args.target_file):
-      src_file_name = os.path.basename(args.source_file)
-      target_file = os.path.join(args.target_file, src_file_name)
-    else:
-      target_file = args.target_file
-
-    if os.path.isfile(args.target_file):
+    if args.target_file and os.path.exists(args.target_file):
       raise IOError('Target file: "{}" already exists.'.format(
         args.target_file))
 
