@@ -72,7 +72,7 @@ def get_key(token, program=PROGRAM_NAME):
     key = getpass.getpass('Encryption key: ')
     if len(key) >= 8:
       break
-    parser.error("A minimum of 8 characters encryption key should be provided")
+    print("A minimum of 8 characters encryption key should be provided")
 
   return key
 
@@ -86,7 +86,7 @@ def save_key(token, key, program=PROGRAM_NAME):
 def make_token(filename):
   """Generate a token use saving the key in the keyring.
 
-  TODO: This token is the filename wihout extension. Change this for
+  (fixme) This token is the filename wihout extension. Change this for
   something better.
 
   """
@@ -108,14 +108,14 @@ def encrypt_file(key, filename, target):
 
   """
   password = md5(key).hexdigest()
-  iv = Random.new().read(AES.block_size)
-  encryptor = AES.new(password, AES.MODE_CBC, iv)
+  ivc = Random.new().read(AES.block_size)
+  encryptor = AES.new(password, AES.MODE_CBC, ivc)
   filesize = os.path.getsize(filename)
 
   with open(target, 'w') as fd_out:
     with open(filename, 'rb') as fd_in:
       fd_out.write(struct.pack('<Q', filesize))
-      fd_out.write(iv)
+      fd_out.write(ivc)
       while True:
         chunk = fd_in.read(BLOCK_SIZE)
         if not chunk:
@@ -142,8 +142,8 @@ def decrypt_file(key, filename, target=None):
   password = md5(key).hexdigest()
   with open(filename, 'rb') as infile:
     fsize = struct.unpack('<Q', infile.read(struct.calcsize('Q')))[0]
-    iv = infile.read(AES.block_size)
-    decryptor = AES.new(password, AES.MODE_CBC, iv)
+    ivc = infile.read(AES.block_size)
+    decryptor = AES.new(password, AES.MODE_CBC, ivc)
     try:
       outfile = open(target, 'wb') if target else sys.stdout
       while True:
@@ -158,6 +158,9 @@ def decrypt_file(key, filename, target=None):
 
 
 def main():
+  """Parse arguments, check if everything is fine then Encrypt / Decrypt
+  the file"""
+
   args = parse_arguments()
   msg = 'Source: "{0.source_file}" Destination: "{0.target_file}"'
   try:
