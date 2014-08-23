@@ -10,11 +10,13 @@ pycrypt: Encrypt and decript your files.
 
 from __future__ import print_function
 
-__author__ = "Fred Cirera"
-__email__ = "<fred@twitter.com>"
-__version__ = '0.1.0'
+__author__ = "Fred C."
+__email__ = "<github-fred@hidzz.com>"
+__version__ = '0.1.1'
 
 import argparse
+import getpass
+import keyring
 import os
 import struct
 import sys
@@ -24,6 +26,7 @@ from Crypto.Cipher import AES
 from hashlib import md5
 
 BLOCK_SIZE = 4096
+PROGRAM_NAME = os.path.basename(__file__)
 
 def parse_arguments():
   """Parse the arguments. Returns an ArgumentParser object."""
@@ -41,19 +44,53 @@ def parse_arguments():
                                    description='Valid commands are:')
 
   encrypt_cmd = commands.add_parser('encrypt')
-  encrypt_cmd.set_defaults(func=encrypt_file)
-  encrypt_cmd.add_argument('-e', '--encryption-key', required=True)
+  encrypt_cmd.set_defaults(func='encrypt')
+  encrypt_cmd.add_argument('-e', '--encryption-key')
   encrypt_cmd.add_argument('-s', '--source-file', required=True)
   encrypt_cmd.add_argument('-t', '--target-file')
 
   decrypt_cmd = commands.add_parser('decrypt')
-  decrypt_cmd.set_defaults(func=decrypt_file)
-  decrypt_cmd.add_argument('-e', '--encryption-key', required=True)
+  decrypt_cmd.set_defaults(func='decrypt')
+  decrypt_cmd.add_argument('-e', '--encryption-key')
   decrypt_cmd.add_argument('-s', '--source-file', required=True)
   decrypt_cmd.add_argument('-t', '--target-file')
 
   options = parser.parse_args()
   return options
+
+def get_key(token, program=PROGRAM_NAME):
+  """Try to find the encryption key for that token in the keyring. If
+  the key cannot be found prompt the user.
+
+  """
+  key = keyring.get_password(program, token)
+  if key:
+    return key
+
+  # the key hasn't been found in the keyring. Request for a new one.
+  while True:
+    key = getpass.getpass('Encryption key: ')
+    if len(key) >= 8:
+      break
+    parser.error("A minimum of 8 characters encryption key should be provided")
+
+  return key
+
+def save_key(token, key, program=PROGRAM_NAME):
+  """Save the key in the keyring"""
+  try:
+    keyring.set_password(program, token, key)
+  except keyring.errors.PasswordSetError as err:
+    print(err, file=sys.stderr)
+
+def make_token(filename):
+  """Generate a token use saving the key in the keyring.
+
+  TODO: This token is the filename wihout extension. Change this for
+  something better.
+
+  """
+  return os.path.splitext(os.path.basename(filename))[0]
 
 
 def encrypt_file(key, filename, target):
@@ -131,12 +168,22 @@ def main():
       raise IOError('Target file: "{}" already exists.'.format(
         args.target_file))
 
-    print(msg.format(args))
-    args.func(args.encryption_key, args.source_file, args.target_file)
-
+    key = args.encryption_key or get_key(make_token(args.source_file))
+    if args.func == 'encrypt':
+      encrypt_file(key, args.source_file, args.target_file)
+      save_key(make_token(args.source_file), key)
+    elif args.func == 'decrypt':
+      decrypt_file(key, args.source_file, args.target_file)
   except IOError as error:
     print(error, file=sys.stderr)
     exit(os.EX_OSERR)
+  else:
+    print(msg.format(args))
 
 if __name__ == '__main__':
-  main()
+  try:
+    main()
+  except KeyboardInterrupt:
+    print("Interrupted by user")
+    sys.exit(os.EX_USAGE)
+  sys.exit(os.EX_OK)
