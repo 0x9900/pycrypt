@@ -44,16 +44,14 @@ def parse_arguments():
                                    description='Valid commands are:')
 
   encrypt_cmd = commands.add_parser('encrypt')
-  encrypt_cmd.set_defaults(func='encrypt')
+  encrypt_cmd.set_defaults(func=encrypt_file)
   encrypt_cmd.add_argument('-e', '--encryption-key')
-  encrypt_cmd.add_argument('-s', '--source-file', required=True)
-  encrypt_cmd.add_argument('-t', '--target-file')
+  encrypt_cmd.add_argument('source_files', nargs='+', help='File to encrypt.')
 
   decrypt_cmd = commands.add_parser('decrypt')
-  decrypt_cmd.set_defaults(func='decrypt')
+  decrypt_cmd.set_defaults(func=decrypt_file)
   decrypt_cmd.add_argument('-e', '--encryption-key')
-  decrypt_cmd.add_argument('-s', '--source-file', required=True)
-  decrypt_cmd.add_argument('-t', '--target-file')
+  decrypt_cmd.add_argument('source_files', nargs='+', help='File to decrypt.')
 
   options = parser.parse_args()
   return options
@@ -83,15 +81,15 @@ def save_key(token, key, program=PROGRAM_NAME):
   except keyring.errors.PasswordSetError as err:
     print(err, file=sys.stderr)
 
-def make_token(filename):
+def make_token(source):
   """Generate a token use saving the key in the keyring.
 
   (fixme) This token is the filename wihout extension. Change this for
   something better.
 
   """
-  return os.path.splitext(os.path.basename(filename))[0]
-
+  filenames = [os.path.basename(s.replace('.aes', '')) for s in source]
+  return "%x" % abs(hash(''.join(filenames)))
 
 def encrypt_file(key, filename, target):
   """
@@ -157,31 +155,40 @@ def decrypt_file(key, filename, target=None):
         outfile.close()
 
 
+def process_file(func, key, source_file):
+  msg = 'Source: "{0}" Destination: "{1}"'
+  if func == encrypt_file:
+    target = os.path.basename(source_file) + '.aes'
+  elif func == decrypt_file:
+    target = os.path.basename(source_file)
+    target = os.path.splitext(target)[0]
+
+  if not os.path.exists(source_file):
+    raise IOError('Source file: "{}" not found.'.format(source_file))
+
+  if os.path.exists(target):
+    raise IOError('Target file: "{}" already exists.'.format(target))
+
+  func(key, source_file, target)
+  print(msg.format(source_file, target))
+
+
 def main():
   """Parse arguments, check if everything is fine then Encrypt / Decrypt
   the file"""
-
   args = parse_arguments()
-  msg = 'Source: "{0.source_file}" Destination: "{0.target_file}"'
-  try:
-    if not os.path.exists(args.source_file):
-      raise IOError('Source file: "{}" not found.'.format(args.source_file))
 
-    if args.target_file and os.path.exists(args.target_file):
-      raise IOError('Target file: "{}" already exists.'.format(
-        args.target_file))
+  token = make_token(args.source_files)
+  key = args.encryption_key or get_key(token)
+  save_key(token, key)
 
-    key = args.encryption_key or get_key(make_token(args.source_file))
-    if args.func == 'encrypt':
-      encrypt_file(key, args.source_file, args.target_file)
-      save_key(make_token(args.source_file), key)
-    elif args.func == 'decrypt':
-      decrypt_file(key, args.source_file, args.target_file)
-  except IOError as error:
-    print(error, file=sys.stderr)
-    exit(os.EX_OSERR)
-  else:
-    print(msg.format(args))
+  for source_file  in args.source_files:
+    try:
+      process_file(args.func, key, source_file)
+    except IOError as error:
+      print(error, file=sys.stderr)
+      exit(os.EX_OSERR)
+
 
 if __name__ == '__main__':
   try:

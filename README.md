@@ -17,10 +17,10 @@ Example:
 
 **Encrypt a file:**
 ```shell
- $ pycrypt encrypt -e 'super secure key' -s foo.txt -t foo.aes
+ $ pycrypt encrypt -e 'super secure key' foo.txt
 ```
 
 **Decrypt a file:**
 ```shell
- $ pycrypt decrypt -e 'super secure key' -s foo.aes -t bar.txt
+ $ pycrypt decrypt -e 'super secure key' foo.txt.aes
 ```
