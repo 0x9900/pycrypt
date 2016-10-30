@@ -21,6 +21,7 @@ import struct
 import sys
 
 from hashlib import md5
+from functools import partial
 
 import keyring
 
@@ -28,12 +29,13 @@ from Crypto import Random
 from Crypto.Cipher import AES
 
 
-BLOCK_SIZE = 4096
+BLOCK_SIZE = 1 << 14
 PROGRAM_NAME = os.path.basename(__file__).replace('.py', '')
 
 def program(token):
   """Make and indentifier for the keychain"""
   return PROGRAM_NAME + ':' + token
+
 
 def parse_arguments():
   """Parse the arguments. Returns an ArgumentParser object."""
@@ -65,6 +67,7 @@ def parse_arguments():
   options = parser.parse_args()
   return options
 
+
 def get_key(token):
   """Try to find the encryption key for that token in the keyring. If
   the key cannot be found prompt the user.
@@ -83,12 +86,14 @@ def get_key(token):
 
   return key
 
+
 def save_key(token, key):
   """Save the key in the keyring"""
   try:
     keyring.set_password(program(token), token, key)
   except keyring.errors.PasswordSetError as err:
     print(err, file=sys.stderr)
+
 
 def make_token(source):
   """Generate a token use saving the key in the keyring. """
@@ -118,11 +123,8 @@ def encrypt_file(key, filename, target):
     with open(filename, 'rb') as fd_in:
       fd_out.write(struct.pack('<Q', filesize))
       fd_out.write(ivc)
-      while True:
-        chunk = fd_in.read(BLOCK_SIZE)
-        if not chunk:
-          break
-        elif len(chunk) % AES.block_size != 0:
+      for chunk in iter(partial(fd_in.read, BLOCK_SIZE), b''):
+        if len(chunk) % AES.block_size != 0:
           chunk += ' ' * (AES.block_size - len(chunk) % AES.block_size)
         fd_out.write(encryptor.encrypt(chunk))
 
@@ -148,10 +150,7 @@ def decrypt_file(key, filename, target=None):
     decryptor = AES.new(password, AES.MODE_CBC, ivc)
     try:
       outfile = open(target, 'wb') if target else sys.stdout
-      while True:
-        chunk = infile.read(BLOCK_SIZE)
-        if not chunk:
-          break
+      for chunk in iter(partial(infile.read, BLOCK_SIZE), b''):
         outfile.write(decryptor.decrypt(chunk))
     finally:
       if outfile != sys.stdout:
