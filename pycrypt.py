@@ -20,7 +20,7 @@ import os
 import struct
 import sys
 
-from hashlib import sha256
+from hashlib import md5
 
 import keyring
 
@@ -76,7 +76,7 @@ def get_key(token):
 
   # the key hasn't been found in the keyring. Request for a new one.
   while True:
-    key = getpass.getpass('Encryption key: ')
+    key = getpass.getpass('Encryption key: ').strip()
     if len(key) >= 8:
       break
     print("A minimum of 8 characters encryption key should be provided")
@@ -109,7 +109,7 @@ def encrypt_file(key, filename, target):
     IOError: raised on failed file operations.
 
   """
-  password = sha256(key).hexdigest()
+  password = md5(key).hexdigest()
   ivc = Random.new().read(AES.block_size)
   encryptor = AES.new(password, AES.MODE_CBC, ivc)
   filesize = os.path.getsize(filename)
@@ -141,7 +141,7 @@ def decrypt_file(key, filename, target=None):
     IOError: raised on failed file operations.
 
   """
-  password = sha256(key).hexdigest()
+  password = md5(key).hexdigest()
   with open(filename, 'rb') as infile:
     fsize = struct.unpack('<Q', infile.read(struct.calcsize('Q')))[0]
     ivc = infile.read(AES.block_size)
