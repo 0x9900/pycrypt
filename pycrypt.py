@@ -16,17 +16,23 @@ __version__ = '0.1.1'
 
 import argparse
 import getpass
-import keyring
 import os
 import struct
 import sys
 
+from hashlib import sha256
+
+import keyring
+
 from Crypto import Random
 from Crypto.Cipher import AES
-from hashlib import md5
+
 
 BLOCK_SIZE = 4096
-PROGRAM_NAME = os.path.basename(__file__)
+PROGRAM_NAME = os.path.basename(__file__).replace('.py', '')
+
+def program(token):
+  return PROGRAM_NAME + ':' + token
 
 def parse_arguments():
   """Parse the arguments. Returns an ArgumentParser object."""
@@ -46,22 +52,24 @@ def parse_arguments():
   encrypt_cmd = commands.add_parser('encrypt')
   encrypt_cmd.set_defaults(func=encrypt_file)
   encrypt_cmd.add_argument('-e', '--encryption-key')
+  encrypt_cmd.add_argument('-s', '--save-key', action='store_true', default=False)
   encrypt_cmd.add_argument('source_files', nargs='+', help='File to encrypt.')
 
   decrypt_cmd = commands.add_parser('decrypt')
   decrypt_cmd.set_defaults(func=decrypt_file)
   decrypt_cmd.add_argument('-e', '--encryption-key')
+  decrypt_cmd.add_argument('-s', '--save-key', action='store_true', default=False)
   decrypt_cmd.add_argument('source_files', nargs='+', help='File to decrypt.')
 
   options = parser.parse_args()
   return options
 
-def get_key(token, program=PROGRAM_NAME):
+def get_key(token):
   """Try to find the encryption key for that token in the keyring. If
   the key cannot be found prompt the user.
 
   """
-  key = keyring.get_password(program, token)
+  key = keyring.get_password(program(token), token)
   if key:
     return key
 
@@ -74,22 +82,17 @@ def get_key(token, program=PROGRAM_NAME):
 
   return key
 
-def save_key(token, key, program=PROGRAM_NAME):
+def save_key(token, key):
   """Save the key in the keyring"""
   try:
-    keyring.set_password(program, token, key)
+    keyring.set_password(program(token), token, key)
   except keyring.errors.PasswordSetError as err:
     print(err, file=sys.stderr)
 
 def make_token(source):
-  """Generate a token use saving the key in the keyring.
+  """Generate a token use saving the key in the keyring. """
+  return os.path.basename(source.replace('.aes', ''))
 
-  (fixme) This token is the filename wihout extension. Change this for
-  something better.
-
-  """
-  filenames = [os.path.basename(s.replace('.aes', '')) for s in source]
-  return "%x" % abs(hash(''.join(filenames)))
 
 def encrypt_file(key, filename, target):
   """
@@ -105,7 +108,7 @@ def encrypt_file(key, filename, target):
     IOError: raised on failed file operations.
 
   """
-  password = md5(key).hexdigest()
+  password = sha256(key).hexdigest()
   ivc = Random.new().read(AES.block_size)
   encryptor = AES.new(password, AES.MODE_CBC, ivc)
   filesize = os.path.getsize(filename)
@@ -137,7 +140,7 @@ def decrypt_file(key, filename, target=None):
     IOError: raised on failed file operations.
 
   """
-  password = md5(key).hexdigest()
+  password = sha256(key).hexdigest()
   with open(filename, 'rb') as infile:
     fsize = struct.unpack('<Q', infile.read(struct.calcsize('Q')))[0]
     ivc = infile.read(AES.block_size)
@@ -178,16 +181,17 @@ def main():
   the file"""
   args = parse_arguments()
 
-  token = make_token(args.source_files)
-  key = args.encryption_key or get_key(token)
-  save_key(token, key)
-
   for source_file  in args.source_files:
+    token = make_token(source_file)
+    key = args.encryption_key or get_key(token)
     try:
       process_file(args.func, key, source_file)
     except IOError as error:
       print(error, file=sys.stderr)
       exit(os.EX_OSERR)
+    else:
+      if args.save_key:
+        save_key(token, key)
 
 
 if __name__ == '__main__':
