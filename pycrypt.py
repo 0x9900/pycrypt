@@ -32,6 +32,7 @@ BLOCK_SIZE = 4096
 PROGRAM_NAME = os.path.basename(__file__).replace('.py', '')
 
 def program(token):
+  """Make and indentifier for the keychain"""
   return PROGRAM_NAME + ':' + token
 
 def parse_arguments():
@@ -159,6 +160,7 @@ def decrypt_file(key, filename, target=None):
 
 
 def process_file(func, key, source_file):
+  """Apply the encrypt or decrpt function on the file"""
   msg = 'Source: "{0}" Destination: "{1}"'
   if func == encrypt_file:
     target = os.path.basename(source_file) + '.aes'
